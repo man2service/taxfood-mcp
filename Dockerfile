@@ -11,7 +11,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-COPY pyproject.toml ./
+# README.md is required by pyproject's `readme = ...` at wheel-build time.
+COPY pyproject.toml README.md ./
 COPY src ./src
 RUN pip install --no-cache-dir .
 
