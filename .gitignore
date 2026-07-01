@@ -1,0 +1,37 @@
+# ── Secrets / env (NEVER commit — this is a PUBLIC repo) ─────────────
+.env
+.env.*
+*.env
+secrets/
+*.pem
+*.key
+*-credentials*.json
+service-account*.json
+
+# ── Local data cache (data is fetched at runtime from the public CDN;
+#    we never bundle dataset files, so no PII ever lands in the repo) ──
+data/
+*.local.json
+cache/
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.python-version
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ── OS / editor ──
+.DS_Store
+.idea/
+.vscode/
+*.swp
