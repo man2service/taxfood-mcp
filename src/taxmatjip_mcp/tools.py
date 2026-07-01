@@ -222,6 +222,8 @@ async def get_place_spending_detail(
         "totalHeadcount": detail.total_heads if detail else 0,
         "perHeadKrw": detail.per_head if detail else 0,
     }
+    if detail is None and place is not None:
+        out["note"] = "집행 내역·공식 출처 링크 등 상세 정보는 taxfood.kr에서 확인할 수 있습니다."
     return out
 
 
@@ -234,7 +236,15 @@ async def get_spend_source_records(
     place = await store.get_place(place_id)
     _resolved, detail = await store.place_detail(place_id, region)
     if detail is None:
-        return {"error": f"no source records for place '{place_id}'", "placeId": place_id, "records": []}
+        if place is None:
+            return {"error": f"place '{place_id}' not found", "placeId": place_id, "records": []}
+        return {
+            "id": place_id,
+            "name": place.name,
+            "recordCount": 0,
+            "records": [],
+            "note": "공식 출처 링크는 taxfood.kr에서 확인할 수 있습니다.",
+        }
     n = _clamp(int(limit) if limit else 5, 1, config.MAX_LIMIT)
     records = [
         {

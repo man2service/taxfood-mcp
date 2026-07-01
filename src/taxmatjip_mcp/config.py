@@ -13,6 +13,10 @@ import os
 SITE_URL: str = os.environ.get("TAXMATJIP_SITE_URL", "https://taxfood.kr")
 # search-index.json (all places + coords) lives under /data.
 DATA_BASE_URL: str = os.environ.get("TAXMATJIP_DATA_BASE_URL", f"{SITE_URL}/data")
+# When set, search-index.json is read from this local directory instead of the CDN.
+# The Kakao Cloud runtime blocks outbound network, so the image bakes the index in at
+# build time (see Dockerfile) and points here. Empty → fetch from the CDN (local dev).
+DATA_DIR: str = os.environ.get("TAXMATJIP_DATA_DIR", "")
 # Per-place evidence ledger is served by the web app's maintained detail API
 # (GET {API_BASE_URL}/<id>?region=<region>) — the canonical source the site itself
 # uses. (The former static detail-<region>.json shards are not always deployed.)

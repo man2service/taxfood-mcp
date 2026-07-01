@@ -10,6 +10,8 @@ public taxfood.kr endpoints and cached in memory.
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import time
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
@@ -106,17 +108,33 @@ class DataStore:
             await self._client.aclose()
             self._client = None
 
-    async def _get_json(self, url: str):
-        resp = await self._http().get(url)
-        if resp.status_code == 200:
-            try:
-                return resp.json()
-            except ValueError:
-                return None
-        if resp.status_code == 404:
+    @staticmethod
+    def _read_local(filename: str):
+        """Read a bundled data file from DATA_DIR (baked into the image). None if
+        unset/missing — the Kakao Cloud runtime blocks egress, so search-index is
+        served from here."""
+        if not config.DATA_DIR:
             return None
-        # Compact error that does not leak the upstream URL to the MCP caller.
-        raise RuntimeError(f"upstream data source unavailable (HTTP {resp.status_code})")
+        path = os.path.join(config.DATA_DIR, filename)
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return None
+
+    async def _get_json(self, url: str):
+        """GET JSON, degrading to None on any failure (non-200, bad JSON, or an
+        unreachable host — the KC runtime has no outbound network)."""
+        try:
+            resp = await self._http().get(url)
+        except httpx.HTTPError:
+            return None
+        if resp.status_code != 200:
+            return None
+        try:
+            return resp.json()
+        except ValueError:
+            return None
 
     def _fresh(self, cached: _Cached | None) -> bool:
         return cached is not None and (time.monotonic() - cached.ts) < self._ttl
@@ -128,8 +146,11 @@ class DataStore:
         async with self._index_lock:
             if self._fresh(self._index):
                 return self._index.value  # type: ignore[return-value]
-            raw = await self._get_json(f"{self._base}/search-index.json") or []
-            bundle = _build_bundle(raw)
+            # Bundled file first (KC runtime), then the CDN (local dev).
+            raw = self._read_local("search-index.json")
+            if raw is None:
+                raw = await self._get_json(f"{self._base}/search-index.json")
+            bundle = _build_bundle(raw or [])
             self._index = _Cached(bundle, time.monotonic())
             return bundle
 

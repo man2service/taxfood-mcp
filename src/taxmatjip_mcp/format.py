@@ -121,6 +121,8 @@ def detail(res: dict[str, Any]) -> str:
             + f" · {e.get('purpose', '')} · [출처]({e.get('sourceUrl', '')})"
             for e in execs
         )
+    if res.get("note"):
+        head += f"\n\n_{res['note']}_"
     return head
 
 
@@ -130,7 +132,9 @@ def sources(res: dict[str, Any]) -> str:
         return err
     records = res.get("records", [])
     if not records:
-        return "공식 출처 기록이 없습니다."
+        note = res.get("note") or "공식 출처 기록이 없습니다."
+        name = res.get("name", "")
+        return f"## {name} — 공식 출처\n{note}" if name else note
     head = f"## {res.get('name', '')} — 공식 출처 (전체 {res.get('recordCount', 0)}건 중 {len(records)}건)"
     lines = [
         f"- {r.get('date', '')} · {r.get('institution', '')} · {_won(r.get('amountKrw'))} · "
