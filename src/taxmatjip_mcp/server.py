@@ -18,12 +18,26 @@ store = DataStore()
 
 _INSTRUCTIONS = (
     "TaxMatjip(세금맛집) exposes where Korean public institutions spent tax money "
-    "(업무추진비) on dining, nationwide (~86,000 places), each backed by official "
-    "open-government disclosure links. Use it to search restaurants, find nearby ones "
-    "from a location, rank areas, summarize an institution's dining spend, and pull the "
-    "official source records. Data is public-interest transparency information; present "
-    "it neutrally."
+    "(업무추진비) on dining, nationwide (~86,000 places). Use it to search restaurants, "
+    "find nearby ones from a location, rank areas, summarize an institution's dining "
+    "spend, and pull official source records. Present the data neutrally.\n\n"
+    "DATA SOURCE (always attribute): public-institution business-expense (업무추진비 / "
+    "법인카드) spending records officially published under Korea's Official Information "
+    "Disclosure system (정보공개) — e.g. opengov.seoul.go.kr and each institution's own "
+    "disclosures — collected and aggregated by taxfood.kr. Every tool response cites this "
+    "source."
 )
+
+# Data-source attribution appended to every tool response (PlayMCP review requirement).
+_SOURCE = (
+    "\n\n— 데이터 출처: 전국 공공기관 업무추진비(법인카드) 지출 정보공개 자료 "
+    "(정보공개 시스템·opengov 등) · 수집·집계 taxfood.kr"
+)
+
+
+def _src(markdown: str) -> str:
+    """Append the data-source attribution to a tool response."""
+    return markdown + _SOURCE
 
 
 @asynccontextmanager
@@ -71,9 +85,9 @@ async def search_tax_restaurants(
     sort_by: str = "visit_count",
     limit: int = config.DEFAULT_LIMIT,
 ) -> str:
-    return format.search(
+    return _src(format.search(
         await tools.search_tax_restaurants(store, query, region, district, sort_by, limit)
-    )
+    ))
 
 
 @mcp.tool(
@@ -92,11 +106,11 @@ async def find_nearby_tax_restaurants(
     limit: int = config.DEFAULT_LIMIT,
     min_visit_count: int | None = None,
 ) -> str:
-    return format.nearby(
+    return _src(format.nearby(
         await tools.find_nearby_tax_restaurants(
             store, latitude, longitude, radius_m, limit, min_visit_count
         )
-    )
+    ))
 
 
 @mcp.tool(
@@ -113,9 +127,9 @@ async def rank_tax_restaurants_in_area(
     metric: str = "total_spend",
     limit: int = config.DEFAULT_LIMIT,
 ) -> str:
-    return format.rank(
+    return _src(format.rank(
         await tools.rank_tax_restaurants_in_area(store, region, district, metric, limit)
-    )
+    ))
 
 
 @mcp.tool(
@@ -132,9 +146,9 @@ async def get_agency_dining_summary(
     region: str | None = None,
     limit: int = config.DEFAULT_LIMIT,
 ) -> str:
-    return format.agency(
+    return _src(format.agency(
         await tools.get_agency_dining_summary(store, institution, region, limit)
-    )
+    ))
 
 
 @mcp.tool(
@@ -148,7 +162,7 @@ async def get_agency_dining_summary(
     annotations=_ro("Get a restaurant's full spending detail"),
 )
 async def get_place_spending_detail(place_id: str, region: str | None = None) -> str:
-    return format.detail(await tools.get_place_spending_detail(store, place_id, region))
+    return _src(format.detail(await tools.get_place_spending_detail(store, place_id, region)))
 
 
 @mcp.tool(
@@ -163,9 +177,9 @@ async def get_place_spending_detail(place_id: str, region: str | None = None) ->
 async def get_spend_source_records(
     place_id: str, region: str | None = None, limit: int = 5
 ) -> str:
-    return format.sources(
+    return _src(format.sources(
         await tools.get_spend_source_records(store, place_id, region, limit)
-    )
+    ))
 
 
 @mcp.tool(
@@ -178,7 +192,7 @@ async def get_spend_source_records(
     annotations=_ro("List regional coverage overview"),
 )
 async def list_regions_overview() -> str:
-    return format.regions(await tools.list_regions_overview(store))
+    return _src(format.regions(await tools.list_regions_overview(store)))
 
 
 def main() -> None:
