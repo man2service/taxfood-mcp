@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sqlite3
 import time
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ from urllib.parse import quote
 import httpx
 
 from . import config
-from .models import PlaceDetail, PlaceSummary
+from .models import PlaceDetail, PlaceSummary, build_place_detail
 
 
 @dataclass(slots=True)
@@ -180,13 +181,44 @@ class DataStore:
         while len(self._detail) > config.DETAIL_CACHE_MAX:
             self._detail.popitem(last=False)  # evict least-recently-used
 
+    @staticmethod
+    def _detail_db() -> str:
+        """Path to the bundled per-place evidence DB (SQLite), or '' if not bundled."""
+        return os.path.join(config.DATA_DIR, "detail.sqlite") if config.DATA_DIR else ""
+
+    async def _detail_from_db(self, place_id: str) -> PlaceDetail | None:
+        db = self._detail_db()
+        if not db or not os.path.exists(db):
+            return None
+
+        def _query():
+            con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+            try:
+                return con.execute(
+                    "SELECT evidence, source_region_label, source_district "
+                    "FROM detail WHERE place_id = ?",
+                    (place_id,),
+                ).fetchone()
+            finally:
+                con.close()
+
+        row = await asyncio.to_thread(_query)
+        if row is None:
+            return None
+        evidence_json, srl, sd = row
+        try:
+            evidence = json.loads(evidence_json)
+        except (ValueError, TypeError):
+            return None
+        return build_place_detail(evidence, srl or "", sd or "")
+
     async def place_detail(
         self, place_id: str, region: str | None = None
     ) -> tuple[str | None, PlaceDetail | None]:
-        """Fetch the place's evidence ledger. The authoritative region comes from the
-        search index; the caller-supplied `region` is only a fallback for ids not in
-        the index (so a wrong region hint can't silently mis-route a known place).
-        Returns (region, detail) — detail is None if the place/region is unknown."""
+        """Fetch the place's evidence ledger with its official per-record source URLs.
+        Served from the bundled SQLite DB (offline; the KC runtime has no egress); falls
+        back to the web detail API for local dev. Authoritative region comes from the
+        search index. Returns (region, detail) — detail is None if unknown."""
         region = await self.resolve_region(place_id) or region
         if not region or region not in config.REGION_SET:
             return None, None
@@ -198,13 +230,13 @@ class DataStore:
             cached = self._detail_get(key)
             if self._fresh(cached):
                 return region, cached.value  # type: ignore[return-value]
-            url = f"{self._api}/{quote(place_id, safe='')}?region={quote(region, safe='')}"
-            raw = await self._get_json(url)
-            detail = (
-                PlaceDetail.from_api(raw)
-                if isinstance(raw, dict) and "executions" in raw
-                else None
-            )
+            detail = await self._detail_from_db(place_id)
+            if detail is None and not self._detail_db():
+                # No bundled DB (local dev) → the web detail API.
+                url = f"{self._api}/{quote(place_id, safe='')}?region={quote(region, safe='')}"
+                raw = await self._get_json(url)
+                if isinstance(raw, dict) and "executions" in raw:
+                    detail = PlaceDetail.from_api(raw)
             self._detail_put(key, _Cached(detail, time.monotonic()))
             return region, detail
 

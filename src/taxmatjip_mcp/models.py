@@ -89,6 +89,21 @@ class Execution:
             source_title=str(d.get("sourceTitle", "")),
         )
 
+    @classmethod
+    def from_evidence(cls, d: dict[str, Any]) -> "Execution":
+        """One row of the raw detail-<region>.json evidence[] (bundled offline)."""
+        head = d.get("headcount")
+        return cls(
+            date=str(d.get("spentOn", "")),
+            agency=str(d.get("institution", "")),
+            dept=str(d.get("department", "")),
+            head=_as_int(head) if head is not None else None,
+            amount=_as_int(d.get("amountKrw")),
+            purpose=str(d.get("purpose", "")),
+            source_url=str(d.get("sourceUrl", "")),
+            source_title=str(d.get("sourceTitle", "")),
+        )
+
 
 @dataclass(slots=True, frozen=True)
 class AgencyRollup:
@@ -130,3 +145,44 @@ class PlaceDetail:
             source_region_label=str(d.get("sourceRegionLabel", "")),
             source_district=str(d.get("sourceDistrict", "")),
         )
+
+
+def build_place_detail(
+    evidence: list[dict[str, Any]],
+    source_region_label: str = "",
+    source_district: str = "",
+) -> PlaceDetail:
+    """Build a PlaceDetail from raw detail-<region>.json evidence rows (bundled offline)
+    — mirrors the web app's buildDetail: executions newest-first, per-institution rollup,
+    head totals, and per-head cost. Each execution keeps its official sourceUrl."""
+    execs = sorted(
+        (Execution.from_evidence(e) for e in evidence),
+        key=lambda e: e.date,
+        reverse=True,
+    )
+    rollup: dict[str, list[int]] = {}
+    total_heads = 0
+    total_amount = 0
+    has_heads = False
+    for e in execs:
+        entry = rollup.setdefault(e.agency, [0, 0])
+        entry[0] += 1
+        entry[1] += e.amount
+        total_amount += e.amount
+        if e.head is not None:
+            total_heads += e.head
+            has_heads = True
+    agencies = tuple(
+        AgencyRollup(agency=name, visits=cnt, amount=amt)
+        for name, (cnt, amt) in sorted(rollup.items(), key=lambda kv: kv[1][1], reverse=True)
+    )
+    per_head = total_amount // total_heads if total_heads > 0 else 0
+    return PlaceDetail(
+        executions=tuple(execs),
+        agencies=agencies,
+        total_heads=total_heads,
+        per_head=per_head,
+        has_heads=has_heads,
+        source_region_label=source_region_label,
+        source_district=source_district,
+    )

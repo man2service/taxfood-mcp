@@ -17,11 +17,16 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 RUN pip install --no-cache-dir .
 
-# The Kakao Cloud runtime blocks outbound network, so bake the place index into the
-# image at build time (CI has egress). The server reads it from TAXMATJIP_DATA_DIR.
+# The Kakao Cloud runtime blocks outbound network, so bake the dataset into the image
+# at build time (CI has egress). The server reads it from TAXMATJIP_DATA_DIR.
+#  1) search-index.json → search / nearby / rank / agency / regions.
+#  2) detail.sqlite (per-place evidence with official source URLs) → detail / source
+#     tools. On-disk SQLite is queried per place, so runtime memory stays low.
+COPY build_detail_db.py ./
 RUN mkdir -p /app/data \
     && python -c "import urllib.request; urllib.request.urlretrieve('https://taxfood.kr/data/search-index.json', '/app/data/search-index.json')" \
-    && python -c "import json; d=json.load(open('/app/data/search-index.json')); assert len(d) > 1000, len(d); print('bundled search-index:', len(d), 'places')"
+    && python -c "import json; d=json.load(open('/app/data/search-index.json')); assert len(d) > 1000, len(d); print('bundled search-index:', len(d), 'places')" \
+    && python build_detail_db.py /app/data/detail.sqlite
 
 EXPOSE 8080
 
